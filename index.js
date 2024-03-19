@@ -1,4 +1,5 @@
 const express = require('express');
+const morgan = require('morgan');
 
 let persons = [
   {
@@ -23,8 +24,13 @@ let persons = [
   },
 ];
 
+morgan.token('body', (req, res) => JSON.stringify(req.body));
+
 const app = express();
 app.use(express.json());
+app.use(
+  morgan(':method :url :status :res[content-length] - :response-time ms :body')
+);
 
 app.get('/api/persons', (req, res) => {
   res.send(JSON.stringify(persons));
