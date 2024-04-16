@@ -1,5 +1,6 @@
 const express = require('express');
 const morgan = require('morgan');
+const cors = require('cors');
 
 let persons = [
   {
@@ -27,7 +28,9 @@ let persons = [
 morgan.token('body', (req, res) => JSON.stringify(req.body));
 
 const app = express();
+
 app.use(express.json());
+app.use(cors());
 app.use(
   morgan(':method :url :status :res[content-length] - :response-time ms :body')
 );
@@ -57,9 +60,10 @@ app.get('/api/persons/:id', (req, res) => {
 
 app.delete('/api/persons/:id', (req, res) => {
   const id = Number(req.params.id);
+  const findPerson = persons.find((person) => person.id === id);
   persons = persons.filter((p) => p.id !== id);
 
-  res.status(204).end();
+  return res.status(200).json({ ...findPerson });
 });
 
 app.post('/api/persons', (req, res) => {
@@ -84,7 +88,7 @@ app.post('/api/persons', (req, res) => {
     return res.status(400).json({ error: 'name must be unique' });
   }
   persons = persons.concat(person);
-  return res.status(201).json({ success: 'Person created successfuly' });
+  return res.status(201).json({ ...person });
 });
 
 const PORT = 3001;
