@@ -3,6 +3,7 @@ const express = require('express');
 const morgan = require('morgan');
 const cors = require('cors');
 const Person = require('./models/person');
+const axios = require('axios');
 
 let persons = [
   {
@@ -46,29 +47,43 @@ app.get('/api/persons', (req, res) => {
 
 app.get('/info', (req, res) => {
   const dateTime = new Date().toString();
-  const info = `
-    <p>Phonebook has info for ${persons.length} people</p>
+  Person.find({}).then((people) => {
+    const info = `
+    <p>Phonebook has info for ${people.length} people</p>
     <p>${dateTime}</p>`;
-  res.send(info);
+    res.send(info);
+  });
 });
 
-app.get('/api/persons/:id', (req, res) => {
-  const id = Number(req.params.id);
-  const person = persons.find((p) => p.id === id);
-  if (person) {
-    res.send(JSON.stringify(person));
-  } else {
-    res.statusMessage = 'The person with that id was not found';
-    res.status(404).end();
-  }
+app.get('/api/persons/:id', (req, res, next) => {
+  Person.findById(req.params.id)
+    .then((foundPerson) => {
+      res.status(200).json(foundPerson);
+    })
+    .catch((error) => next(error));
 });
 
-app.delete('/api/persons/:id', (req, res) => {
-  const id = Number(req.params.id);
-  const findPerson = persons.find((person) => person.id === id);
-  persons = persons.filter((p) => p.id !== id);
+app.delete('/api/persons/:id', (req, res, next) => {
+  Person.findByIdAndDelete(req.params.id)
+    .then((result) => {
+      res.status(204).end();
+    })
+    .catch((error) => next(error));
+});
 
-  return res.status(200).json({ ...findPerson });
+app.put('/api/persons/:id', (req, res, next) => {
+  const body = req.body;
+
+  const person = {
+    name: body.name,
+    number: body.number,
+  };
+
+  Person.findByIdAndUpdate(req.params.id, person, { new: true })
+    .then((result) => {
+      res.status(201).json(result);
+    })
+    .catch((error) => next(error));
 });
 
 app.post('/api/persons', (req, res) => {
@@ -81,15 +96,48 @@ app.post('/api/persons', (req, res) => {
     return res.status(400).json({ error: 'Missing the number' });
   }
 
-  const person = new Person({
-    name: body.name,
-    number: body.number,
-  });
+  Person.findOne({ name: body.name })
+    .then((foundPerson) => {
+      if (foundPerson) {
+        let idStr = foundPerson.id;
+        const data = {
+          name: body.name,
+          number: body.number,
+        };
+        axios
+          .put(`http://localhost:3001/api/persons/${idStr}`, data)
+          .then((result) => {
+            res.status(200).json(result.data);
+          })
+          .catch((error) => {
+            console.log('Something went wrong with the PUT Request');
+            res.status(500).json({ error: 'Internal Server Error' });
+          });
+      } else {
+        const person = new Person({
+          name: body.name,
+          number: body.number,
+        });
 
-  person.save().then((savedPerson) => {
-    res.json(savedPerson);
-  });
+        person.save().then((savedPerson) => {
+          res.status(201).json(savedPerson);
+        });
+      }
+    })
+    .catch((error) => console.log(error));
 });
+
+const errorHandler = (error, req, res, next) => {
+  console.error(error.message);
+
+  if (error.name === 'CastError') {
+    return res.status(400).send({ error: 'Malformatted id' });
+  }
+
+  next(error);
+};
+
+app.use(errorHandler);
 
 const PORT = process.env.PORT;
 
