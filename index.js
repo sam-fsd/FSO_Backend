@@ -5,29 +5,6 @@ const cors = require('cors');
 const Person = require('./models/person');
 const axios = require('axios');
 
-let persons = [
-  {
-    id: 1,
-    name: 'Arto Hellas',
-    number: '040-123456',
-  },
-  {
-    id: 2,
-    name: 'Ada Lovelace',
-    number: '39-44-5323523',
-  },
-  {
-    id: 3,
-    name: 'Dan Abramov',
-    number: '12-43-234345',
-  },
-  {
-    id: 4,
-    name: 'Mary Poppendieck',
-    number: '39-23-6423122',
-  },
-];
-
 morgan.token('body', (req, res) => JSON.stringify(req.body));
 
 const app = express();
@@ -79,14 +56,18 @@ app.put('/api/persons/:id', (req, res, next) => {
     number: body.number,
   };
 
-  Person.findByIdAndUpdate(req.params.id, person, { new: true })
+  const opts = { runValidators: true, new: true };
+
+  Person.findByIdAndUpdate(req.params.id, person, opts)
     .then((result) => {
       res.status(201).json(result);
     })
-    .catch((error) => next(error));
+    .catch((error) => {
+      next(error);
+    });
 });
 
-app.post('/api/persons', (req, res) => {
+app.post('/api/persons', (req, res, next) => {
   const body = req.body;
 
   if (!body.name) {
@@ -105,13 +86,12 @@ app.post('/api/persons', (req, res) => {
           number: body.number,
         };
         axios
-          .put(`http://localhost:3001/api/persons/${idStr}`, data)
+          .put(`${BASE_URL}/api/persons/${idStr}`, data)
           .then((result) => {
             res.status(200).json(result.data);
           })
           .catch((error) => {
-            console.log('Something went wrong with the PUT Request');
-            res.status(500).json({ error: 'Internal Server Error' });
+            next(error);
           });
       } else {
         const person = new Person({
@@ -119,12 +99,18 @@ app.post('/api/persons', (req, res) => {
           number: body.number,
         });
 
-        person.save().then((savedPerson) => {
-          res.status(201).json(savedPerson);
-        });
+        person
+          .save()
+          .then((savedPerson) => {
+            res.status(201).json(savedPerson);
+          })
+          .catch((error) => next(error));
       }
     })
-    .catch((error) => console.log(error));
+    .catch((error) => {
+      console.log(error);
+      next(error);
+    });
 });
 
 const errorHandler = (error, req, res, next) => {
@@ -132,6 +118,8 @@ const errorHandler = (error, req, res, next) => {
 
   if (error.name === 'CastError') {
     return res.status(400).send({ error: 'Malformatted id' });
+  } else if (error.name === 'ValidationError') {
+    return res.status(400).json({ error: error.message });
   }
 
   next(error);
